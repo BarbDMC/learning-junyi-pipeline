@@ -3,3 +3,8 @@ venv/
 __pycache__/
 logs/
 data/
+
+# dbt artifacts
+target/
+dbt_packages/
+logs/

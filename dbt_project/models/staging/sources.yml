@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: raw_junyi
+    schema: raw
+    tables:
+      - name: info_user_data
+      - name: info_content
+      - name: log_problem
