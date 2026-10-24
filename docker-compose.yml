@@ -74,7 +74,8 @@ services:
       - de-network
 
   airflow:
-    image: apache/airflow:2.10.5
+    build: .
+    image: junyi-airflow:2.10.5
     container_name: junyi-airflow
     restart: unless-stopped
     command: standalone
@@ -82,6 +83,10 @@ services:
       AIRFLOW__CORE__EXECUTOR: SequentialExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+      # El entrypoint migra la DB y crea el admin antes de standalone,
+      # evitando que standalone genere una password aleatoria
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
       _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
       _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
       # Conexiones predefinidas, visibles como postgres_warehouse y minio_s3 en los DAGs
@@ -92,6 +97,8 @@ services:
     volumes:
       - airflow_home:/opt/airflow
       - ./dags:/opt/airflow/dags
+      - ./data:/opt/airflow/data
+      - ./migrations:/opt/airflow/migrations
     depends_on:
       postgres:
         condition: service_healthy
