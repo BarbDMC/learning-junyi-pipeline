@@ -30,8 +30,8 @@ services:
     networks:
       - de-network
 
-  # pgsty/silo: fork comunitario de MinIO (las imagenes oficiales se retiraron
-  # de Docker Hub en 2025). Drop-in replacement: mismas env vars y CLI.
+  # pgsty/silo: community fork of MinIO (official images were removed from
+  # Docker Hub in 2025). Drop-in replacement: same env vars and CLI.
   minio:
     image: pgsty/silo:RELEASE.2026-10-15T00-00-00Z
     container_name: junyi-minio
@@ -83,15 +83,22 @@ services:
       AIRFLOW__CORE__EXECUTOR: SequentialExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
-      # El entrypoint migra la DB y crea el admin antes de standalone,
-      # evitando que standalone genere una password aleatoria
+      # The entrypoint migrates the DB and creates the admin user before standalone,
+      # preventing standalone from generating a random password
       _AIRFLOW_DB_MIGRATE: "true"
       _AIRFLOW_WWW_USER_CREATE: "true"
       _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
       _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
-      # Conexiones predefinidas, visibles como postgres_warehouse y minio_s3 en los DAGs
+      # Predefined connections, available as postgres_warehouse and minio_s3 in DAGs
       AIRFLOW_CONN_POSTGRES_WAREHOUSE: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-warehouse}
       AIRFLOW_CONN_MINIO_S3: aws://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@?endpoint_url=http%3A%2F%2Fminio%3A9000
+      # .env variables read by the DAGs (POSTGRES_PORT is the host port, not used here)
+      POSTGRES_DB: ${POSTGRES_DB:-warehouse}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-junyi-raw}
     ports:
       - "${AIRFLOW_PORT:-8080}:8080"
     volumes:

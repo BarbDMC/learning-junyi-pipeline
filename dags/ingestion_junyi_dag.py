@@ -6,17 +6,17 @@ from minio import Minio
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-# Docker internal connection parameters
+# Credentials come from .env, injected by docker-compose; hosts are Docker-internal
 MINIO_ENDPOINT = "minio:9000"
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin"
-BUCKET_NAME = "junyi-raw"
+MINIO_ACCESS_KEY = os.environ["MINIO_ROOT_USER"]
+MINIO_SECRET_KEY = os.environ["MINIO_ROOT_PASSWORD"]
+BUCKET_NAME = os.environ["MINIO_BUCKET"]
 
 PG_HOST = "postgres"
 PG_PORT = 5432
-PG_DB = "warehouse"
-PG_USER = "postgres"
-PG_PASSWORD = "postgres"
+PG_DB = os.environ["POSTGRES_DB"]
+PG_USER = os.environ["POSTGRES_USER"]
+PG_PASSWORD = os.environ["POSTGRES_PASSWORD"]
 
 DATA_DIR = "/opt/airflow/data"
 MIGRATIONS_DIR = "/opt/airflow/migrations"
