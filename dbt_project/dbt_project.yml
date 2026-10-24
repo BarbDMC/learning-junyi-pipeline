@@ -17,11 +17,11 @@ clean-targets:
 
 models:
   junyi_analytics:
-    # Capa 1: Limpieza, tipado y estandarización (Vistas)
+    # Layer 1: Cleaning, typing and standardization (views)
     staging:
       +materialized: view
       +schema: staging
-    # Capa 2: Tablas de Hechos y Dimensiones (Tablas físicas)
+    # Layer 2: Fact and dimension tables (physical tables)
     marts:
       +materialized: table
       +schema: marts

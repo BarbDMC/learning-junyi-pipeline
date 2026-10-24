@@ -11,9 +11,9 @@ SELECT
         ELSE 'PM' 
     END AS am_pm,
     CASE 
-        WHEN hour_24 BETWEEN 6 AND 11 THEN 'Mañana'
-        WHEN hour_24 BETWEEN 12 AND 17 THEN 'Tarde'
-        WHEN hour_24 BETWEEN 18 AND 23 THEN 'Noche'
-        ELSE 'Madrugada'
+        WHEN hour_24 BETWEEN 6 AND 11 THEN 'Morning'
+        WHEN hour_24 BETWEEN 12 AND 17 THEN 'Afternoon'
+        WHEN hour_24 BETWEEN 18 AND 23 THEN 'Evening'
+        ELSE 'Night'
     END AS day_part
 FROM hours

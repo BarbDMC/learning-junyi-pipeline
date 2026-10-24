@@ -8,3 +8,4 @@ data/
 target/
 dbt_packages/
 logs/
+.streamlit/secrets.toml
