@@ -30,8 +30,10 @@ services:
     networks:
       - de-network
 
+  # pgsty/silo: fork comunitario de MinIO (las imagenes oficiales se retiraron
+  # de Docker Hub en 2025). Drop-in replacement: mismas env vars y CLI.
   minio:
-    image: minio/minio:latest
+    image: pgsty/silo:RELEASE.2026-10-15T00-00-00Z
     container_name: junyi-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -53,7 +55,7 @@ services:
       - de-network
 
   minio-init:
-    image: minio/mc:latest
+    image: pgsty/silo:RELEASE.2026-10-15T00-00-00Z
     container_name: junyi-minio-init
     depends_on:
       minio:
@@ -66,7 +68,7 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
       mc mb --ignore-existing local/$${MINIO_BUCKET};
-      echo 'Bucket $${MINIO_BUCKET} creado (o ya existia)';
+      echo Bucket listo: $${MINIO_BUCKET};
       "
     networks:
       - de-network
