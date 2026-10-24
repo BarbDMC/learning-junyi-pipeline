@@ -1,0 +1,27 @@
+name: 'junyi_analytics'
+version: '1.0.0'
+config-version: 2
+
+profile: 'junyi_warehouse'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  junyi_analytics:
+    # Capa 1: Limpieza, tipado y estandarización (Vistas)
+    staging:
+      +materialized: view
+      +schema: staging
+    # Capa 2: Tablas de Hechos y Dimensiones (Tablas físicas)
+    marts:
+      +materialized: table
+      +schema: marts
