@@ -196,6 +196,16 @@ The public app reads Supabase only, so it needs no Docker.
    query = { sslmode = "require" }
    ```
 
+   The app also accepts the same names as `.env`, as top-level secrets (TOML needs the quotes) or as environment variables:
+
+   ```toml
+   SUPABASE_HOST = "aws-0-<region>.pooler.supabase.com"
+   SUPABASE_USER = "junyi_reader.<project-ref>"
+   SUPABASE_PASSWORD = "<junyi_reader password>"
+   ```
+
+   `SUPABASE_PORT`, `SUPABASE_DB` and `SUPABASE_SSLMODE` default to `5432`, `postgres` and `require`.
+
 With a single source there's no selector, and the page shows "Data source: supabase". Query results are cached until the app restarts, so reboot it from the Streamlit dashboard after a new DAG run.
 
 ## Project structure

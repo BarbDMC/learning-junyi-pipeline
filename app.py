@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -11,8 +12,10 @@ st.set_page_config(
 )
 
 # 1. Native PostgreSQL connection
-# Each [connections.<name>] in .streamlit/secrets.toml (or the Streamlit Cloud secrets) is a
-# data source. Without any, the app reads the local Docker warehouse with its default credentials.
+# Data sources, in order of priority:
+#   1. Each [connections.<name>] in .streamlit/secrets.toml (or the Streamlit Cloud secrets).
+#   2. SUPABASE_* keys, the same names as in .env, as top-level secrets or environment variables.
+#   3. The local Docker warehouse with its default credentials.
 LOCAL_WAREHOUSE = {
     "dialect": "postgresql",
     "host": "localhost",
@@ -23,11 +26,29 @@ LOCAL_WAREHOUSE = {
 }
 
 try:
-    sources = list(st.secrets.get("connections", {}))
+    secrets = st.secrets.to_dict()
 except StreamlitSecretNotFoundError:
-    sources = []
+    secrets = {}
 
-if not sources:
+def setting(key, default=None):
+    return secrets.get(key) or os.environ.get(key) or default
+
+sources = list(secrets.get("connections", {}))
+
+if not sources and setting("SUPABASE_HOST"):
+    source = "supabase"
+    conn = st.connection(
+        source,
+        type="sql",
+        dialect="postgresql",
+        host=setting("SUPABASE_HOST"),
+        port=int(setting("SUPABASE_PORT", 5432)),
+        database=setting("SUPABASE_DB", "postgres"),
+        username=setting("SUPABASE_USER"),
+        password=setting("SUPABASE_PASSWORD"),
+        query={"sslmode": setting("SUPABASE_SSLMODE", "require")},
+    )
+elif not sources:
     source = "local"
     conn = st.connection(source, type="sql", **LOCAL_WAREHOUSE)
 else:
