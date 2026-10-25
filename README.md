@@ -4,6 +4,14 @@ A local, end-to-end data engineering project built to learn the full path from r
 
 It uses the public [Junyi Academy Online Learning Activity Dataset](https://www.kaggle.com/datasets/junyiacademy/learning-activity-public-dataset-by-junyi-academy): about 16 million problem attempts from roughly 72,000 students on a Taiwanese online learning platform (August 2018 to July 2019).
 
+## Live demo
+
+**[learning-junyi-pipeline.streamlit.app](https://learning-junyi-pipeline.streamlit.app/)**
+
+To share the visualizations without anyone having to run Docker, the pipeline also loads a cloud database on [Supabase](https://supabase.com/), a hosted PostgreSQL. The same Airflow DAG that builds the local warehouse can target Supabase instead. The dashboard is published on Streamlit Community Cloud and reads from it.
+
+The live app uses a 500,000-row sample of `Log_Problem` to fit Supabase's free 500 MB plan. Running the project locally loads all 16 million rows (see [Getting started](#getting-started)).
+
 ## The problem
 
 The dataset ships as three CSV files, one of them about 3 GB. In that form it can't answer simple questions without loading everything into memory:
@@ -279,4 +287,14 @@ Staging models are light, one-to-one cleanups of the raw tables. Views keep them
 ### Why doesn't the dashboard show "how many attempts it takes to pass a problem"?
 
 The dataset can't answer that. In Junyi, `is_correct` means **correct on the first attempt without hints**, not "eventually solved". Almost every row with `is_correct = True` has exactly one attempt, and there is no field that says whether a problem was solved in the end. A chart of "attempts to pass" built on `is_correct` would show 1 for everyone. The last dashboard section shows what the data does support: the share of problems correct on the first try, and how many attempts students make when they aren't.
+
+## Future evolution
+
+The DAG has no schedule and Airflow runs on a laptop: it's triggered by hand from the local UI. That fits this dataset. Junyi published it once as a one-year snapshot (August 2018 to July 2019), and it isn't updated, so loading the CSVs once is all it needs.
+
+With a source that changes every day, the next steps would be:
+
+- **Managed Airflow in the cloud** (for example Astronomer, Amazon MWAA or Google Cloud Composer), so the DAG runs on a daily schedule without a laptop being on.
+- **Ingestion from an API** instead of local CSVs: a task that pulls each day's new records and lands them in object storage, where the rest of the pipeline already picks them up.
+- **Incremental loads:** append only the new day's data instead of truncating and reloading the `raw` tables, and switch the fact table to an incremental dbt model.
 
