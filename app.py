@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from streamlit.errors import StreamlitSecretNotFoundError
 
 # General page configuration
 st.set_page_config(
@@ -10,10 +11,34 @@ st.set_page_config(
 )
 
 # 1. Native PostgreSQL connection
-conn = st.connection("postgresql", type="sql")
+# Each [connections.<name>] in .streamlit/secrets.toml (or the Streamlit Cloud secrets) is a
+# data source. Without any, the app reads the local Docker warehouse with its default credentials.
+LOCAL_WAREHOUSE = {
+    "dialect": "postgresql",
+    "host": "localhost",
+    "port": 5433,
+    "database": "warehouse",
+    "username": "postgres",
+    "password": "postgres",
+}
+
+try:
+    sources = list(st.secrets.get("connections", {}))
+except StreamlitSecretNotFoundError:
+    sources = []
+
+if not sources:
+    source = "local"
+    conn = st.connection(source, type="sql", **LOCAL_WAREHOUSE)
+else:
+    # "local" first, so it's the default when both are configured
+    sources.sort(key=lambda name: name != "local")
+    source = st.sidebar.selectbox("Data source", sources) if len(sources) > 1 else sources[0]
+    conn = st.connection(source, type="sql")
 
 st.title("🎓 Junyi Academy — Learning Telemetry")
-st.markdown("Analytics dashboard connected directly to the local Data Warehouse (Star Schema).")
+st.markdown("Analytics dashboard connected directly to the Data Warehouse (Star Schema).")
+st.caption(f"Data source: **{source}**")
 
 # 2. Executive metrics (top KPIs)
 kpi_query = """

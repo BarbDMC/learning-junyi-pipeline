@@ -78,7 +78,9 @@ services:
     image: junyi-airflow:2.10.5
     container_name: junyi-airflow
     restart: unless-stopped
-    command: standalone
+    # airflow_home outlives the container, so a stale webserver PID file can make the
+    # webserver think it's already running; remove it before starting standalone
+    command: bash -c "rm -f /opt/airflow/airflow-webserver.pid && exec airflow standalone"
     environment:
       AIRFLOW__CORE__EXECUTOR: SequentialExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -89,13 +91,21 @@ services:
       _AIRFLOW_WWW_USER_CREATE: "true"
       _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
       _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
-      # Predefined connections, available as postgres_warehouse and minio_s3 in DAGs
-      AIRFLOW_CONN_POSTGRES_WAREHOUSE: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-warehouse}
+      # Predefined connection, available as minio_s3 in DAGs
       AIRFLOW_CONN_MINIO_S3: aws://${MINIO_ROOT_USER:-minioadmin}:${MINIO_ROOT_PASSWORD:-minioadmin}@?endpoint_url=http%3A%2F%2Fminio%3A9000
-      # .env variables read by the DAGs (POSTGRES_PORT is the host port, not used here)
+      # Warehouses the DAG can target; each run picks one with the `target` param
+      WAREHOUSE_TARGET: ${WAREHOUSE_TARGET:-local}
       POSTGRES_DB: ${POSTGRES_DB:-warehouse}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      LOCAL_LOG_PROBLEM_ROW_LIMIT: ${LOCAL_LOG_PROBLEM_ROW_LIMIT:-}
+      SUPABASE_HOST: ${SUPABASE_HOST:-}
+      SUPABASE_PORT: ${SUPABASE_PORT:-5432}
+      SUPABASE_DB: ${SUPABASE_DB:-postgres}
+      SUPABASE_USER: ${SUPABASE_USER:-}
+      SUPABASE_PASSWORD: ${SUPABASE_PASSWORD:-}
+      SUPABASE_SSLMODE: ${SUPABASE_SSLMODE:-require}
+      SUPABASE_LOG_PROBLEM_ROW_LIMIT: ${SUPABASE_LOG_PROBLEM_ROW_LIMIT:-500000}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-junyi-raw}
@@ -106,6 +116,7 @@ services:
       - ./dags:/opt/airflow/dags
       - ./data:/opt/airflow/data
       - ./migrations:/opt/airflow/migrations
+      - ./dbt_project:/opt/airflow/dbt_project
     depends_on:
       postgres:
         condition: service_healthy

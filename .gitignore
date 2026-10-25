@@ -9,3 +9,6 @@ target/
 dbt_packages/
 logs/
 .streamlit/secrets.toml
+
+# dbt anonymous usage ID
+dbt_project/.user.yml

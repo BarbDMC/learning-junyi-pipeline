@@ -1,0 +1,15 @@
+# Credentials come from WAREHOUSE_* env vars (set from .env by docker-compose).
+# Defaults point at the local Postgres container, for running dbt from the host.
+junyi_warehouse:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('WAREHOUSE_HOST', 'localhost') }}"
+      port: "{{ env_var('WAREHOUSE_PORT', '5433') | as_number }}"
+      user: "{{ env_var('WAREHOUSE_USER', 'postgres') }}"
+      pass: "{{ env_var('WAREHOUSE_PASSWORD', 'postgres') }}"
+      dbname: "{{ env_var('WAREHOUSE_DB', 'warehouse') }}"
+      sslmode: "{{ env_var('WAREHOUSE_SSLMODE', 'prefer') }}"
+      schema: public
+      threads: 4

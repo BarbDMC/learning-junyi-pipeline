@@ -38,13 +38,14 @@ The goal is to turn those files into a queryable star schema in a warehouse, wit
   └─────────────────┘
 ```
 
-The DAG runs three tasks in order:
+The DAG runs four tasks in order:
 
 1. **`run_db_migrations`** applies any pending `.sql` file in `migrations/` and records it in `public.schema_migrations`.
 2. **`upload_local_to_minio`** uploads the CSVs from `data/` to the `junyi-raw` bucket under `landing/`.
-3. **`load_minio_to_postgres`** truncates each `raw.*` table and streams the matching file from MinIO straight into Postgres with `COPY`, without writing it to disk.
+3. **`load_minio_to_postgres`** truncates each `raw.*` table and streams the matching file from MinIO straight into Postgres with `COPY`, without writing it to disk. Each warehouse can cap how many `Log_Problem` rows are loaded.
+4. **`dbt_run`** runs `dbt run` inside the Airflow container, creating the `staging` and `marts` schemas and every model.
 
-dbt is run by hand from the host after the DAG finishes (see [Getting started](#getting-started)).
+Each run picks its warehouse with the DAG's `target` parameter: `local` for the Postgres container, or `supabase` for a cloud database (see [Using Supabase](#using-supabase-as-the-warehouse)).
 
 ## Tech stack
 
@@ -52,9 +53,9 @@ dbt is run by hand from the host after the DAG finishes (see [Getting started](#
 |---|---|---|
 | Containers | Docker Compose (Colima on macOS) | One network, `de-network`, for all services |
 | Data lake | MinIO via [`pgsty/silo`](https://hub.docker.com/r/pgsty/silo) | Community fork; official MinIO images are gone (see FAQ) |
-| Orchestration | Apache Airflow 2.10.5, `standalone` | Custom image with `minio` and `psycopg2-binary` |
-| Warehouse | PostgreSQL 15 | Database `warehouse` |
-| Transformations | dbt-core 1.10 + dbt-postgres 1.9 | Run from a local virtualenv |
+| Orchestration | Apache Airflow 2.10.5, `standalone` | Custom image with `minio`, `psycopg2-binary` and dbt |
+| Warehouse | PostgreSQL 15 (local) or Supabase | Chosen per run with the DAG's `target` parameter |
+| Transformations | dbt-core 1.12 + dbt-postgres 1.11 | Own virtualenv inside the Airflow image |
 | Dashboard | Streamlit 1.50 + Plotly | Reads `marts.*` directly |
 
 ## Data model
@@ -112,63 +113,90 @@ On first start:
 | MinIO S3 API | http://localhost:9000 | `minioadmin` / `minioadmin` |
 | PostgreSQL | `localhost:5433`, database `warehouse` | `postgres` / `postgres` |
 
-### 3. Load the raw data
+### 3. Run the pipeline
 
-In the Airflow UI, turn on and trigger the `ingest_junyi_data` DAG. When all three tasks are green, `raw.info_user_data`, `raw.info_content` and `raw.log_problem` are populated.
+In the Airflow UI, turn on the `ingest_junyi_data` DAG and click **Trigger DAG**. The form asks for a `target`: keep `local` for the Postgres container. When all four tasks are green, the `raw`, `staging` and `marts` schemas are built.
 
-### 4. Build the models with dbt
+`WAREHOUSE_TARGET` in `.env` sets the form's default. The local warehouse loads all 16M `Log_Problem` rows unless `LOCAL_LOG_PROBLEM_ROW_LIMIT` is set.
 
-Create a virtualenv and install the local tools:
+`dbt_project/profiles.yml` reads its connection from `WAREHOUSE_*` variables, which the DAG sets for the chosen target, so it contains no credentials. Without them it falls back to the local container on `localhost:5433`, which lets you also run `dbt run` from `dbt_project/` on the host.
+
+### 4. Run the dashboard
+
+Create a virtualenv, install the dashboard's packages and start it from the project root:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install dbt-postgres streamlit plotly pandas sqlalchemy psycopg2-binary
-```
-
-Add a `junyi_warehouse` profile to `~/.dbt/profiles.yml`. It lives outside the repo because it contains credentials:
-
-```yaml
-junyi_warehouse:
-  target: dev
-  outputs:
-    dev:
-      type: postgres
-      host: localhost
-      port: 5433
-      user: postgres
-      pass: postgres
-      dbname: warehouse
-      schema: public
-      threads: 4
-```
-
-Then build:
-
-```bash
-cd dbt_project
-dbt run
-```
-
-### 5. Run the dashboard
-
-Create `.streamlit/secrets.toml`. It's in `.gitignore`:
-
-```toml
-[connections.postgresql]
-dialect = "postgresql"
-host = "localhost"
-port = 5433
-database = "warehouse"
-username = "postgres"
-password = "postgres"
-```
-
-Then, from the project root:
-
-```bash
+pip install -r requirements.txt
 streamlit run app.py
 ```
+
+With no secrets file, the app reads the local Docker warehouse with the default credentials from `.env.example`. To change that or add Supabase, copy the example and edit it. `secrets.toml` is in `.gitignore`:
+
+```bash
+cp .streamlit/secrets.toml.example .streamlit/secrets.toml
+```
+
+Each `[connections.<name>]` section is a data source. With both `local` and `supabase` defined, a **Data source** selector appears in the sidebar; `local` is the default.
+
+### Using Supabase as the warehouse
+
+1. In Supabase, open **Connect** and copy the **Session pooler** details. The direct `db.<ref>.supabase.co` host is IPv6-only, which Docker usually can't reach.
+2. Fill in the Supabase block in `.env`:
+
+   ```bash
+   SUPABASE_HOST=aws-0-<region>.pooler.supabase.com
+   SUPABASE_PORT=5432
+   SUPABASE_DB=postgres
+   SUPABASE_USER=postgres.<project-ref>
+   SUPABASE_PASSWORD=<your database password>
+   SUPABASE_SSLMODE=require
+   SUPABASE_LOG_PROBLEM_ROW_LIMIT=500000
+   ```
+
+3. Recreate Airflow so it picks up the new values:
+
+   ```bash
+   docker compose up -d airflow
+   ```
+
+4. Trigger the DAG and choose `supabase` as the `target`. To make it the default, set `WAREHOUSE_TARGET=supabase`.
+5. To see Supabase in the dashboard, add a `[connections.supabase]` section to `.streamlit/secrets.toml` with the same values. The commented block in `secrets.toml.example` shows the format, including `query = { sslmode = "require" }`.
+
+Both warehouses stay available: switching is just a different `target` on the next run. If the Supabase values are missing, a `supabase` run fails on its first task with a message saying which ones.
+
+The free plan caps the database at 500 MB, and the full dataset needs about 6 GB. With `SUPABASE_LOG_PROBLEM_ROW_LIMIT=500000` the whole warehouse is about 225 MB. The file isn't sorted by date, so the first rows are spread across the year.
+
+### Publishing the dashboard on Streamlit Community Cloud
+
+The public app reads Supabase only, so it needs no Docker.
+
+1. **Create a read-only role** for it. The app's secrets should never hold the `postgres` password. Run this once in the Supabase **SQL Editor**, with a strong password of your own:
+
+   ```sql
+   CREATE ROLE junyi_reader WITH LOGIN PASSWORD '<strong password>';
+   GRANT USAGE ON SCHEMA marts TO junyi_reader;
+   GRANT SELECT ON ALL TABLES IN SCHEMA marts TO junyi_reader;
+   -- dbt recreates the tables on every run; this keeps new ones readable
+   ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA marts GRANT SELECT ON TABLES TO junyi_reader;
+   ```
+
+2. **Deploy:** on [share.streamlit.io](https://share.streamlit.io), click **Create app** and pick this repository, branch `main` and file `app.py`. The root `requirements.txt` lists the dashboard's packages.
+3. **Add the secrets:** under **Advanced settings → Secrets**, paste only a Supabase section:
+
+   ```toml
+   [connections.supabase]
+   dialect = "postgresql"
+   host = "aws-0-<region>.pooler.supabase.com"
+   port = 5432
+   database = "postgres"
+   username = "junyi_reader.<project-ref>"
+   password = "<junyi_reader password>"
+   query = { sslmode = "require" }
+   ```
+
+With a single source there's no selector, and the page shows "Data source: supabase". Query results are cached until the app restarts, so reboot it from the Streamlit dashboard after a new DAG run.
 
 ## Project structure
 
@@ -188,8 +216,11 @@ streamlit run app.py
 │       └── marts/             # dim_* and fct_* tables
 ├── data/                      # CSVs go here (git-ignored)
 ├── docker-compose.yml
-├── Dockerfile                 # Airflow image with extra Python packages
-├── requirements.txt           # Packages installed into the Airflow image
+├── Dockerfile                 # Airflow image with extra Python packages and dbt
+├── requirements.txt           # Dashboard packages (also used by Streamlit Cloud)
+├── requirements-airflow.txt   # Packages installed into the Airflow image
+├── .streamlit/
+│   └── secrets.toml.example   # Data sources for the dashboard
 └── .env.example
 ```
 
